@@ -46,7 +46,9 @@ ESTACIONES = [
 
 DIAS_POR_BLOQUE = 180          # el endpoint diario admite ~6 meses por petición
 PAUSA = 1.5                    # s entre peticiones (límite ~50/min por API Key)
-MAX_REINTENTOS_429 = 5
+# AEMET devuelve 429 también cuando SU plataforma está saturada ("caudal por minuto"),
+# a veces durante muchos minutos seguidos. No es un error: hay que insistir.
+MAX_REINTENTOS_429 = 40
 SOLAPE_DIAS = 10               # en modo incremental se rebajan estos días para recoger correcciones tardías
 
 SALIDA_JS = os.path.join(AQUI, "murcia_data.js")
@@ -195,9 +197,14 @@ def cargar_existente():
     if not m:
         return None
     try:
-        return json.loads(m.group(1))
+        previo = json.loads(m.group(1))
     except json.JSONDecodeError:
         return None
+    # Si el archivo lo generó el plan B (Open-Meteo), no sirve para el modo
+    # incremental: hay que bajar la serie AEMET completa y sustituirlo.
+    if previo.get("source") != "aemet":
+        return None
+    return previo
 
 
 def bloques(inicio: date, fin: date, dias):
@@ -217,7 +224,8 @@ def main():
     inv = inventario()
     hoy = date.today()
 
-    salida = {"fields": ["date", "rr", "tn", "tx", "tm", "ffm", "fxy", "qcflags", "fxy_ms",
+    salida = {"source": "aemet",
+              "fields": ["date", "rr", "tn", "tx", "tm", "ffm", "fxy", "qcflags", "fxy_ms",
                          "um", "ux", "un", "res12", "res13", "tntxm", "fxi", "sol"],
               "stations": [], "data": {}}
 
@@ -235,19 +243,32 @@ def main():
         else:
             print(f"\n=== {est['name']}: descarga completa desde {desde} (tardará unos minutos) ===")
 
-        lista = list(bloques(desde, hoy, DIAS_POR_BLOQUE))
-        for i, (ini, fin) in enumerate(lista, 1):
-            print(f"[{i}/{len(lista)}] {ini} → {fin} ...", end=" ")
-            try:
-                datos = descargar_bloque(est["aemet"], ini, fin)
-                for d in datos:
-                    fila = a_fila(d)
-                    if fila[0]:
-                        por_fecha[fila[0]] = fila
-                print(f"{len(datos)} días")
-            except Exception as e:
-                print(f"ERROR: {e}", file=sys.stderr)
-            time.sleep(PAUSA)
+        pendientes = list(bloques(desde, hoy, DIAS_POR_BLOQUE))
+        for pasada in (1, 2, 3):
+            if pasada > 1:
+                if not pendientes:
+                    break
+                print(f"  ── Pasada {pasada}: reintento de {len(pendientes)} bloques fallidos ──")
+                time.sleep(90)
+            fallidos = []
+            for i, (ini, fin) in enumerate(pendientes, 1):
+                print(f"[{i}/{len(pendientes)}] {ini} → {fin} ...", end=" ")
+                try:
+                    datos = descargar_bloque(est["aemet"], ini, fin)
+                    for d in datos:
+                        fila = a_fila(d)
+                        if fila[0]:
+                            por_fecha[fila[0]] = fila
+                    print(f"{len(datos)} días")
+                except Exception as e:
+                    print(f"ERROR: {e}", file=sys.stderr)
+                    fallidos.append((ini, fin))
+                time.sleep(PAUSA)
+            pendientes = fallidos
+        if pendientes:
+            sys.exit(f"⚠️  {len(pendientes)} bloques de {est['name']} no se pudieron descargar tras 3 pasadas.\n"
+                     "    No escribo nada para no dejar huecos en la serie. Vuelve a intentarlo en un rato\n"
+                     "    (AEMET suele estar saturada a mediodía).")
 
         if not por_fecha:
             print(f"⚠️  Sin datos para {est['name']}; no se incluye.", file=sys.stderr)
