@@ -208,6 +208,49 @@ sub("        ${L?'Pour la climatologie historique :':'Para climatología histór
     "        • ${L?'choisis une période couverte par la série':'elige un periodo cubierto por la serie'} (${L?'depuis':'desde'} 1984): <b>1991–2020</b>, <b>2000–${L?'auj.':'act.'}</b>, <b>2010s</b>, <b>2020s</b>.",
     "ayuda tabla")
 
+# ---------- 12b. Comparar años: color FIJO por año ----------
+# Antes el color dependía de la posición en la lista ordenada: al añadir un año
+# anterior (p.ej. 1989 con 2025 ya puesto), todos los demás cambiaban de color.
+sub("let chartInstance = null;\nlet lbChartInstance = null;",
+    "let chartInstance = null;\nlet lbChartInstance = null;\n"
+    "// Colores fijos por año en el modo comparar: cada año conserva su color aunque\n"
+    "// se añadan o quiten otros. El color se libera al deseleccionar el año.\n"
+    "const YEAR_PALETTE = ['#ff3b30','#00c7ff','#ffd60a','#9b59b6','#2ecc71','#ff8c00','#ff66cc','#1f6feb','#a8e10c','#8b4513','#00e5b0','#e6194b','#5856d6','#ffa3a3','#0a84ff','#d4ff00','#c0392b','#7fdbff','#f39c12','#e0e0e0'];\n"
+    "const YEAR_COLOR_MAP = new Map();\n"
+    "function yearColor(y){\n"
+    "  y = +y;\n"
+    "  if(YEAR_COLOR_MAP.has(y)) return YEAR_COLOR_MAP.get(y);\n"
+    "  const used = new Set(YEAR_COLOR_MAP.values());\n"
+    "  let col = YEAR_PALETTE.find(c => !used.has(c));\n"
+    "  if(!col) col = YEAR_PALETTE[YEAR_COLOR_MAP.size % YEAR_PALETTE.length];\n"
+    "  YEAR_COLOR_MAP.set(y, col);\n"
+    "  return col;\n"
+    "}\n"
+    "function pruneYearColors(){\n"
+    "  for(const y of [...YEAR_COLOR_MAP.keys()]) if(!curCompareYears.has(y)) YEAR_COLOR_MAP.delete(y);\n"
+    "}",
+    "helper yearColor")
+sub("  // Quitar de curCompareYears años no disponibles\n"
+    "  for(const y of [...curCompareYears]) if(!yrs.has(y)) curCompareYears.delete(y);",
+    "  // Quitar de curCompareYears años no disponibles\n"
+    "  for(const y of [...curCompareYears]) if(!yrs.has(y)) curCompareYears.delete(y);\n"
+    "  pruneYearColors();",
+    "prune colores")
+sub("      backgroundColor: singleStation ? yearsArr.map((y,yi)=>yearPalette[yi%yearPalette.length]+'cc') : stColor+'cc',\n"
+    "      borderColor:     singleStation ? yearsArr.map((y,yi)=>yearPalette[yi%yearPalette.length])      : stColor,",
+    "      backgroundColor: singleStation ? yearsArr.map(y=>yearColor(y)+'cc') : stColor+'cc',\n"
+    "      borderColor:     singleStation ? yearsArr.map(y=>yearColor(y))      : stColor,",
+    "color fijo: barras total")
+sub("      const col = single ? null : yearPalette[yi % yearPalette.length];",
+    "      const col = single ? null : yearColor(y);",
+    "color fijo: climograma")
+sub("      const color = stations.length > 1 ? (st.color === '#FFE08A' ? '#c79900' : st.color) : yearPalette[yi % yearPalette.length];",
+    "      const color = stations.length > 1 ? (st.color === '#FFE08A' ? '#c79900' : st.color) : yearColor(y);",
+    "color fijo: meses del año")
+sub("      if(singleStation){\n        color = yearPalette[yi % yearPalette.length];",
+    "      if(singleStation){\n        color = yearColor(y);",
+    "color fijo: mensual por días")
+
 # ---------- 13. Nombres de archivo exportados y localStorage ----------
 sub("a.download = `albertville_${[...curStations].join('-')}_${curVar}_${curChart}.png`;",
     "a.download = `murcia_${[...curStations].join('-')}_${curVar}_${curChart}.png`;", "nombre png")

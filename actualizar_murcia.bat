@@ -16,5 +16,12 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+echo Regenerando efemerides (olas de calor y frio)...
+where py >nul 2>nul
+if %errorlevel%==0 (
+  py -3 generar_efemerides.py
+) else (
+  python generar_efemerides.py
+)
 start "" "Murcia_app_explorador.html"
 pause

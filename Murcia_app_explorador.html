@@ -484,6 +484,22 @@ let curCompareYears = new Set();
 let curCompareView = 'daily'; // 'daily' = por días | 'total' = un valor agregado por año
 let chartInstance = null;
 let lbChartInstance = null;
+// Colores fijos por año en el modo comparar: cada año conserva su color aunque
+// se añadan o quiten otros. El color se libera al deseleccionar el año.
+const YEAR_PALETTE = ['#ff3b30','#00c7ff','#ffd60a','#9b59b6','#2ecc71','#ff8c00','#ff66cc','#1f6feb','#a8e10c','#8b4513','#00e5b0','#e6194b','#5856d6','#ffa3a3','#0a84ff','#d4ff00','#c0392b','#7fdbff','#f39c12','#e0e0e0'];
+const YEAR_COLOR_MAP = new Map();
+function yearColor(y){
+  y = +y;
+  if(YEAR_COLOR_MAP.has(y)) return YEAR_COLOR_MAP.get(y);
+  const used = new Set(YEAR_COLOR_MAP.values());
+  let col = YEAR_PALETTE.find(c => !used.has(c));
+  if(!col) col = YEAR_PALETTE[YEAR_COLOR_MAP.size % YEAR_PALETTE.length];
+  YEAR_COLOR_MAP.set(y, col);
+  return col;
+}
+function pruneYearColors(){
+  for(const y of [...YEAR_COLOR_MAP.keys()]) if(!curCompareYears.has(y)) YEAR_COLOR_MAP.delete(y);
+}
 
 const VAR_INFO = {
   'rr': {label:'Lluvia (mm)', label_fr:'Pluie (mm)', color:'#3a78bb', unit:'mm', idx:1, type:'sum'},
@@ -1116,6 +1132,7 @@ function refreshYearCompareBar(){
   const sorted = Array.from(yrs).sort((a,b)=>b-a);
   // Quitar de curCompareYears años no disponibles
   for(const y of [...curCompareYears]) if(!yrs.has(y)) curCompareYears.delete(y);
+  pruneYearColors();
   const ypills = document.getElementById('year-pills');
   ypills.innerHTML = '';
   sorted.forEach(y => {
@@ -1271,8 +1288,8 @@ function renderYearComparisonTotals(stations, info, monthsArr, L){
     return {
       label: st.short,
       data: vals.map(o=>o.v),
-      backgroundColor: singleStation ? yearsArr.map((y,yi)=>yearPalette[yi%yearPalette.length]+'cc') : stColor+'cc',
-      borderColor:     singleStation ? yearsArr.map((y,yi)=>yearPalette[yi%yearPalette.length])      : stColor,
+      backgroundColor: singleStation ? yearsArr.map(y=>yearColor(y)+'cc') : stColor+'cc',
+      borderColor:     singleStation ? yearsArr.map(y=>yearColor(y))      : stColor,
       borderWidth: 1.5,
       counts: vals.map(o=>o.n),
       expected: vals.map(()=>expDays),
@@ -1374,7 +1391,7 @@ function renderClimogram(){
       const m = monthlyOfYear(y);
       tmAll.push(...m.tm.filter(v=>v!=null)); rrAll.push(...m.rr.filter(v=>v!=null));
       const single = yearsSel.length === 1;
-      const col = single ? null : yearPalette[yi % yearPalette.length];
+      const col = single ? null : yearColor(y);
       const striped = !single && (yi % 2 === 1); // años alternos: barras rayadas y línea discontinua
       datasets.push({type:'line', label:`${y} — T (°C)`, data:m.tm, yAxisID:'y',
         climoExtra: {tx: m.tx, tn: m.tn},
@@ -1695,7 +1712,7 @@ function renderMonthsComparison(){
       });
       const data = acc.map((a,mi) => wmoMonthValid(a.length, mi) ? anAgg(a, info.type) : null);
       // Color: por estación si hay varias; por año si hay una sola estación
-      const color = stations.length > 1 ? (st.color === '#FFE08A' ? '#c79900' : st.color) : yearPalette[yi % yearPalette.length];
+      const color = stations.length > 1 ? (st.color === '#FFE08A' ? '#c79900' : st.color) : yearColor(y);
       datasets.push({
         label: (stations.length > 1 ? st.short + ' ' : '') + y,
         data,
@@ -1892,7 +1909,7 @@ function renderYearComparison(){
       // Si hay varias estaciones, usar color por estación (igual que antes).
       let color;
       if(singleStation){
-        color = yearPalette[yi % yearPalette.length];
+        color = yearColor(y);
       } else {
         color = st.color === '#FFE08A' ? '#c79900' : st.color;
       }
