@@ -1,0 +1,6 @@
+# Clave de API de AEMET (privada, no subir)
+aemet_api_key.txt
+
+# Python
+__pycache__/
+*.pyc
