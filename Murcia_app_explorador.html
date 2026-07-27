@@ -79,6 +79,41 @@
   .icon-btn{background:var(--card);border:1px solid var(--border);color:var(--ink);padding:6px 10px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit;}
   .icon-btn:hover{background:var(--hover);}
   .chart-canvas-wrap{position:relative;height:440px;}
+  /* Tooltip del gráfico en HTML: el de canvas no permite jerarquía tipográfica ni color */
+  .cjs-tt{position:absolute;pointer-events:none;z-index:20;opacity:0;transition:opacity .12s;
+    background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:12px;
+    box-shadow:0 8px 28px rgba(0,0,0,.18);padding:12px 14px;min-width:200px;max-width:320px;
+    font-size:12.5px;line-height:1.45;}
+  .cjs-tt .tt-serie-val{justify-content:flex-start;}
+  .cjs-tt .tt-serie-val .tt-serie-num{margin-left:auto;font-variant-numeric:tabular-nums;
+    white-space:nowrap;padding-left:14px;}
+  .cjs-tt .tt-cap{font-size:10.5px;color:var(--mut);margin:-3px 0 4px 22px;
+    font-variant-numeric:tabular-nums;}
+  .cjs-tt .tt-date{font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--mut);
+    text-transform:uppercase;margin-bottom:9px;}
+  .cjs-tt .tt-serie{display:flex;align-items:center;gap:7px;font-weight:700;margin:11px 0 6px;}
+  .cjs-tt .tt-serie:first-of-type{margin-top:0;}
+  .cjs-tt .tt-key{width:15px;height:3px;border-radius:2px;flex:none;}
+  .cjs-tt .tt-hero{font-size:24px;font-weight:800;letter-spacing:-.6px;line-height:1.1;
+    font-variant-numeric:tabular-nums;}
+  .cjs-tt .tt-hero-lbl{font-size:11px;color:var(--mut);margin-bottom:8px;}
+  .cjs-tt .tt-badge{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 9px;
+    border-radius:999px;margin-bottom:9px;}
+  .cjs-tt .tt-badge.up{background:#fdecea;color:#b3261e;}
+  .cjs-tt .tt-badge.down{background:#e8f1fb;color:#12518f;}
+  .cjs-tt .tt-row{display:flex;justify-content:space-between;gap:16px;font-size:12px;}
+  .cjs-tt .tt-row span:first-child{color:var(--mut);}
+  .cjs-tt .tt-row span:last-child{font-weight:700;font-variant-numeric:tabular-nums;}
+  .cjs-tt .tt-plain{font-size:12px;}
+  .cjs-tt .tt-bar{position:relative;height:7px;border-radius:4px;background:var(--hover);
+    border:1px solid var(--border);margin:8px 0 3px;}
+  .cjs-tt .tt-bar i{position:absolute;top:0;height:100%;border-radius:4px;}
+  .cjs-tt .tt-bar b{position:absolute;top:-4px;width:2px;height:13px;border-radius:1px;background:#e0a800;}
+  .cjs-tt .tt-ends{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut);
+    font-variant-numeric:tabular-nums;margin-bottom:7px;}
+  html[data-theme="dark"] .cjs-tt{box-shadow:0 8px 28px rgba(0,0,0,.55);}
+  html[data-theme="dark"] .cjs-tt .tt-badge.up{background:#3a1512;color:#ff9d92;}
+  html[data-theme="dark"] .cjs-tt .tt-badge.down{background:#0f2438;color:#8fc2f5;}
 
   /* Stats grid */
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:6px;}
@@ -485,6 +520,88 @@ let curRefPeriod = null; // serie climatológica elegida {a, b, label} | null = 
 let curMonthFilter = 'all'; // 'all' | '1'..'12' | 'spring'|'summer'|'autumn'|'winter'
 let curCompareYears = new Set();
 let cmpMode = false;   // modo comparar: cada toque añade/quita un año (alternativa táctil a Ctrl+clic)
+
+// ---- Tooltip del gráfico en HTML --------------------------------------------
+// El tooltip de Chart.js se dibuja en canvas: no admite negritas, color ni
+// columnas alineadas. Lo sacamos a HTML para poder jerarquizar la información.
+// El callback label() marca las líneas con TT_SEP; las que no llevan marca se
+// pintan tal cual, así los gráficos que no la usan siguen funcionando igual.
+const TT_SEP = '\x1f';
+function renderChartTooltip(ctx){
+  const {chart, tooltip} = ctx;
+  const wrap = chart.canvas.parentNode;
+  let el = wrap.querySelector('.cjs-tt');
+  if(!el){ el = document.createElement('div'); el.className = 'cjs-tt'; wrap.appendChild(el); }
+  if(tooltip.opacity === 0){ el.style.opacity = 0; return; }
+  try{
+    const frag = document.createDocumentFragment();
+    const add = (cls, txt) => { const d = document.createElement('div'); d.className = cls;
+      if(txt != null) d.textContent = txt; frag.appendChild(d); return d; };
+    const par = (padre, txt, peso) => { const s = document.createElement('span');
+      s.textContent = txt; if(peso) s.style.fontWeight = peso; padre.appendChild(s); return s; };
+    (tooltip.title || []).forEach(t => add('tt-date', t));
+    (tooltip.body || []).forEach((b, i) => {
+      const col = (tooltip.labelColors || [])[i] || {};
+      (b.lines || []).forEach((linea, j) => {
+        const s = String(linea);
+        // Primera línea sin marca = nombre de la serie, con su trazo de color
+        if(!s.startsWith(TT_SEP)){
+          if(j > 0){ add('tt-plain', s); return; }
+          const h = add('tt-serie');
+          const k = document.createElement('i'); k.className = 'tt-key';
+          k.style.background = col.borderColor || col.backgroundColor || 'currentColor';
+          h.appendChild(k); par(h, s);
+          return;
+        }
+        const p = s.split(TT_SEP);   // p[0] siempre vacío
+        if(p[1] === 'S'){   // cabecera de serie con su valor a la derecha
+          const h = add('tt-serie tt-serie-val');
+          const k = document.createElement('i'); k.className = 'tt-key';
+          k.style.background = col.borderColor || col.backgroundColor || 'currentColor';
+          h.appendChild(k); par(h, p[2]);
+          const val = par(h, p[3]); val.className = 'tt-serie-num';
+        }
+        else if(p[1] === 'C'){ add('tt-cap', p[2]); }
+        else if(p[1] === 'H'){ add('tt-hero', p[3]); add('tt-hero-lbl', p[2]); }
+        else if(p[1] === 'D'){ add('tt-badge ' + (p[3] === 'up' ? 'up' : 'down'),
+                                   (p[3] === 'up' ? '▲ ' : '▼ ') + p[2]); }
+        else if(p[1] === 'R'){ const r = add('tt-row'); par(r, p[2]); par(r, p[3]); }
+        else if(p[1] === 'G'){
+          const tn = +p[2], tx = +p[3], nv = (p[4] === '' ? null : +p[4]), color = p[5] || 'currentColor';
+          const lo = Math.min(tn, nv == null ? tn : nv), hi = Math.max(tx, nv == null ? tx : nv);
+          const m = (hi - lo) * 0.12 || 1, a = lo - m, z = hi + m;
+          const pc = x => ((x - a) / (z - a)) * 100;
+          const bar = add('tt-bar');
+          const seg = document.createElement('i');
+          seg.style.left = pc(tn) + '%';
+          seg.style.width = Math.max(pc(tx) - pc(tn), 2) + '%';
+          seg.style.background = color;
+          bar.appendChild(seg);
+          if(nv != null){ const t = document.createElement('b');
+            t.style.left = 'calc(' + pc(nv) + '% - 1px)'; bar.appendChild(t); }
+          // Los extremos nombran mín y máx; el del medio dice qué es la marca amarilla
+          const ends = add('tt-ends'); par(ends, p[6] || '');
+          if(p[8]){ const c = par(ends, p[8]); c.style.color = '#c98a00'; c.style.fontWeight = '700'; }
+          par(ends, p[7] || '');
+        }
+      });
+    });
+    el.replaceChildren(frag);
+  }catch(err){
+    // Nunca dejar al usuario sin tooltip por un fallo de formato.
+    // Sin depender de nada externo: si el respaldo fallara, no habría tooltip.
+    try{
+      el.textContent = (tooltip.body || []).map(b => (b.lines || []).join(' · '))
+                         .join('  |  ').split('\x1f').join(' ');
+    }catch(_){ el.textContent = ''; }
+  }
+  const w = el.offsetWidth, h = el.offsetHeight;
+  let x = tooltip.caretX + 16;
+  if(x + w > chart.canvas.clientWidth) x = tooltip.caretX - w - 16;
+  el.style.left = Math.max(0, x) + 'px';
+  el.style.top = Math.max(0, Math.min(tooltip.caretY - h / 2, chart.canvas.clientHeight - h)) + 'px';
+  el.style.opacity = 1;
+}
 let curCompareView = 'daily'; // 'daily' = por días | 'total' = un valor agregado por año
 let chartInstance = null;
 let lbChartInstance = null;
@@ -2568,6 +2685,8 @@ function renderChartMulti(canvasId, type, labels, datasets, info, isCompare){
         legend:{display:isCompare || datasets.length>1, position:'top',
                 labels:{boxWidth:14,padding:10,font:{size:12,weight:'bold'}}},
         tooltip:{
+          enabled: false,               // lo pinta renderChartTooltip() en HTML
+          external: renderChartTooltip,
           filter: (item) => !item.dataset.isBand,
           callbacks:{
           title: items => {
@@ -2605,11 +2724,14 @@ function renderChartMulti(canvasId, type, labels, datasets, info, isCompare){
             // Si es línea de media o banda, mostrar etiqueta tal cual
             if(item.dataset.isMeanLine){
               const u = (item.dataset.yAxisID==='y1') ? 'mm' : info.unit;
-              const filas = [`${item.dataset.label}: ${v.toFixed(1)} ${u}`];
-              // La media del periodo solo cabe (y solo aporta) cuando no se comparan varios años
+              // El desglose solo cabe (y solo aporta) cuando no se comparan varios años
               const nReal = item.chart.data.datasets.filter(d => !d.isBand && !d.isMeanLine && d.data[item.dataIndex] != null).length;
-              if(nReal <= 1 && item.dataset.serieMean != null)
-                filas.push(`${L?'Moyenne de la période affichée':'Media del periodo mostrado'}: ${item.dataset.serieMean.toFixed(1)} ${u}`);
+              const S = TT_SEP;
+              if(nReal > 1) return `${S}S${S}${item.dataset.label}${S}${v.toFixed(1)} ${u}`;
+              const filas = [item.dataset.label,
+                             `${S}R${S}${L?'Ce jour-là':'Ese día'}${S}${v.toFixed(1)} ${u}`];
+              if(item.dataset.serieMean != null)
+                filas.push(`${S}R${S}${L?'Moyenne de la période':'Media del periodo'}${S}${item.dataset.serieMean.toFixed(1)} ${u}`);
               return filas;
             }
             if(item.dataset.isBand) return `${item.dataset.label}: ${v.toFixed(2)} ${info.unit}`;
@@ -2633,31 +2755,40 @@ function renderChartMulti(canvasId, type, labels, datasets, info, isCompare){
               const tn = item.dataset.dayTn ? item.dataset.dayTn[di] : null;
               const cab = `${rankPrefix||''}${item.dataset.label}`;
               const nReal = item.chart.data.datasets.filter(d => !d.isBand && !d.isMeanLine && d.data[di] != null).length;
-              // Comparando varios años el desglose no cabe: una línea por año
+              // Comparando varios años el desglose no cabe: nombre + valor, y máx/mín debajo
               if(nReal > 1){
+                const filas = [`${TT_SEP}S${TT_SEP}${cab}${TT_SEP}${v.toFixed(1)} ${u}`];
                 const ex = [];
-                if(tx != null) ex.push((L?'max':'máx')+' '+tx.toFixed(1)+'°');
-                if(tn != null) ex.push((L?'min':'mín')+' '+tn.toFixed(1)+'°');
-                return `${cab}: ${v.toFixed(1)} ${u}` + (ex.length ? '  ('+ex.join(' · ')+')' : '');
+                if(tx != null) ex.push((L?'max':'máx')+' '+tx.toFixed(1)+' '+u);
+                if(tn != null) ex.push((L?'min':'mín')+' '+tn.toFixed(1)+' '+u);
+                if(ex.length) filas.push(`${TT_SEP}C${TT_SEP}${ex.join('  ·  ')}`);
+                return filas;
               }
-              // Un solo año: desglose completo, diciendo QUÉ es cada número
+              // Un solo año: desglose completo, jerarquizado por renderChartTooltip()
+              const S = TT_SEP;
               const varLbl = (L ? info.label_fr : info.label).replace(/\s*\([^)]*\)\s*$/, '');
               const ml = item.chart.data.datasets.find(d => d.isMeanLine);
               const nv = ml ? ml.data[di] : null;
-              let desv = '';
+              const filas = [cab, `${S}H${S}${varLbl}${S}${v.toFixed(1)} ${u}`];
               if(nv != null){
                 const d = v - nv;
-                desv = '  (' + (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(1) + ' ' + u + ' ' +
-                       (d >= 0 ? (L?'au-dessus de la normale':'sobre lo normal')
-                               : (L?'en dessous de la normale':'bajo lo normal')) + ')';
+                filas.push(`${S}D${S}${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(1)} ${u} ` +
+                           (d >= 0 ? (L?'au-dessus de la normale':'sobre lo normal')
+                                   : (L?'en dessous de la normale':'bajo lo normal')) +
+                           `${S}${d >= 0 ? 'up' : 'down'}`);
               }
-              const filas = [cab, `${varLbl}: ${v.toFixed(1)} ${u}${desv}`];
-              const mm = [];
-              if(tx != null) mm.push(`${L?'Maximale':'Máxima'}: ${tx.toFixed(1)} ${u}`);
-              if(tn != null) mm.push(`${L?'Minimale':'Mínima'}: ${tn.toFixed(1)} ${u}`);
-              if(mm.length) filas.push(mm.join('  ·  '));
+              // Barra: recorrido del día (mín→máx) con la normal marcada en amarillo
+              if(tx != null && tn != null){
+                filas.push([`${S}G`, tn, tx, (nv == null ? '' : nv), item.dataset.borderColor || '',
+                            `${L?'min':'mín'} ${tn.toFixed(1)} ${u}`,
+                            `${L?'max':'máx'} ${tx.toFixed(1)} ${u}`,
+                            nv == null ? '' : `${L?'normale':'normal'} ${nv.toFixed(1)}`].join(S));
+              } else {
+                if(tx != null) filas.push(`${S}R${S}${L?'Maximale':'Máxima'}${S}${tx.toFixed(1)} ${u}`);
+                if(tn != null) filas.push(`${S}R${S}${L?'Minimale':'Mínima'}${S}${tn.toFixed(1)} ${u}`);
+              }
               if(item.dataset.serieMean != null)
-                filas.push(`${L?'Moyenne de la période affichée':'Media del periodo mostrado'}: ${item.dataset.serieMean.toFixed(1)} ${u}`);
+                filas.push(`${S}R${S}${L?'Moyenne de la période':'Media del periodo'}${S}${item.dataset.serieMean.toFixed(1)} ${u}`);
               return filas;
             }
             const c = item.dataset.counts ? item.dataset.counts[item.dataIndex] : null;
