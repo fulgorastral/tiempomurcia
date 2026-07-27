@@ -10,24 +10,42 @@ de la OMM: 3 días consecutivos por encima del percentil 95 de las máximas de j
 
 Todo el cálculo pasa en el navegador; los datos viven en `murcia_data.js`.
 
+## Dos fuentes, dos ritmos
+
+AEMET publica los datos de estas estaciones por dos vías distintas, y la app usa las dos:
+
+| | Qué es | Retraso | Dónde se ve |
+|---|---|---|---|
+| **Valores climatológicos diarios** | Datos validados y definitivos | 2–4 días | La gráfica y las efemérides |
+| **Observación convencional** | Medida horaria en bruto, sin validar | ~1 hora | El panel «Ahora mismo» |
+
+Por eso la gráfica termina unos días antes de hoy aunque el panel de arriba marque la temperatura
+de hace un rato: no es un fallo, son dos productos distintos de AEMET. La observación solo
+devuelve las últimas ~24 h, así que no sirve para rellenar el histórico.
+
 ## La web se actualiza sola
 
-`.github/workflows/actualizar-datos.yml` se ejecuta **cada día a las 05:40 UTC** (07:40 en España
-en horario de verano) y:
+`.github/workflows/actualizar-datos.yml` se ejecuta **cada hora** (para el panel «Ahora mismo») y
+hace una pasada de control **cada día a las 05:40 UTC**. En cada ejecución:
 
 1. Baja de **AEMET OpenData** los días nuevos de las dos estaciones (modo incremental: solo lo que
    falta, más 10 días de solape para recoger correcciones tardías).
 2. Regenera `informe_olas_calor.html`, `informe_olas_frio.html` y `efemerides.js`.
-3. Commitea los cambios y **republica la web en GitHub Pages**.
+3. Lee la observación en tiempo real y genera `observacion.js`. Ese archivo **no se versiona**
+   (está en `.gitignore`): caduca en una hora y se regenera en cada pasada, así que versionarlo
+   serían 24 commits basura al día. Viaja directo a la web publicada.
+4. Commitea lo que haya cambiado y **republica la web en GitHub Pages**.
 
-AEMET publica los valores climatológicos diarios con **unos 4 días de retardo**, así que lo normal
-es que la web vaya siempre unos días por detrás de hoy. La cabecera indica *datos hasta el…* y
-*actualizado el…* para que se vea de un vistazo.
+La cabecera indica *datos hasta el…* y *actualizado el…* para que se vea de un vistazo hasta dónde
+llega la serie oficial.
 
 Si algún día AEMET no responde (se satura con frecuencia y devuelve 429), **no se toca la serie**:
-la web se republica con los datos que ya había y al día siguiente se reintenta. El workflow se
-marca en rojo para que llegue el aviso por email. Open-Meteo/ERA5 solo entra como red de emergencia
-si no hubiera ningún dato, porque son datos de modelo y no medidas reales de la estación.
+la web se republica con los datos que ya había y se reintenta en la pasada siguiente. Solo la
+pasada diaria avisa por email si falla — si avisaran también las horarias, un rato de saturación
+llenaría el correo con el mismo problema repetido. Open-Meteo/ERA5 solo entra como red de
+emergencia si no hubiera ningún dato, porque son datos de modelo y no medidas reales de estación.
+
+La página abierta se refresca sola: recarga `observacion.js` cada 15 minutos sin recargar la web.
 
 ### Puesta en marcha (una sola vez)
 
@@ -51,6 +69,7 @@ efemérides y abre `Murcia_app_explorador.html`.
 | Archivo | Qué hace |
 |---|---|
 | `descargar_aemet_murcia.py` | Descarga la serie de AEMET → `murcia_data.js` + un CSV por estación. `--completo` rebaja todo desde 1984 |
+| `descargar_observacion.py` | Observación horaria en tiempo real → `observacion.js` (panel «Ahora mismo») |
 | `descargar_openmeteo_murcia.py` | Plan B sin API Key: reanálisis ERA5 vía Open-Meteo (datos de modelo, no oficiales) |
 | `generar_efemerides.py` | Detecta olas de calor y de frío → los dos informes HTML + `efemerides.js` |
 | `generar_app_murcia.py` | Regenera `Murcia_app_explorador.html` a partir de la app de Albertville |

@@ -1,6 +1,10 @@
 # Clave de API de AEMET (privada, no subir)
 aemet_api_key.txt
 
+# Observación en tiempo real: caduca en una hora, la regenera el robot en cada
+# pasada y viaja directa a la web. Versionarla serían 24 commits basura al día.
+observacion.js
+
 # Python
 __pycache__/
 *.pyc

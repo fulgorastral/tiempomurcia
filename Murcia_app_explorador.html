@@ -12,6 +12,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
 <script src="murcia_data.js"></script>  <!-- datos AEMET de Murcia y Caravaca (los genera actualizar_murcia.bat / descargar_aemet_murcia.py) -->
 <script src="efemerides.js"></script>  <!-- lista de informes del menú Efemérides; persiste entre versiones -->
+<script src="observacion.js"></script>  <!-- temperatura de ahora mismo; lo regenera el robot cada hora. Si falta, el panel simplemente no aparece -->
 <style>
   :root{
     --ink:#1a1a1a; --mut:#6b6b6b; --bg:#fbfbfb; --card:#fff;
@@ -78,6 +79,25 @@
   .chart-actions{display:flex;gap:6px;}
   .icon-btn{background:var(--card);border:1px solid var(--border);color:var(--ink);padding:6px 10px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit;}
   .icon-btn:hover{background:var(--hover);}
+  /* Panel "ahora mismo": observación horaria sin validar, aparte de la serie oficial */
+  .obs-panel{background:var(--card);border:1px solid var(--border);border-radius:14px;
+    padding:14px 16px;margin-bottom:16px;}
+  .obs-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+  .obs-head h2{font-size:14px;margin:0;font-weight:700;}
+  .obs-when{font-size:11.5px;color:var(--mut);}
+  .obs-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;}
+  .obs-card{border:1px solid var(--border);border-radius:12px;padding:12px 14px;position:relative;
+    overflow:hidden;}
+  .obs-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--c);}
+  .obs-name{font-size:12px;font-weight:700;margin-bottom:2px;}
+  .obs-ubi{font-size:10.5px;color:var(--mut);margin-bottom:6px;}
+  .obs-temp{font-size:32px;font-weight:800;letter-spacing:-1px;line-height:1.05;
+    font-variant-numeric:tabular-nums;}
+  .obs-mm{font-size:11.5px;color:var(--mut);margin:4px 0 8px;font-variant-numeric:tabular-nums;}
+  .obs-mm b{color:var(--ink);font-weight:700;}
+  .obs-extra{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--mut);
+    font-variant-numeric:tabular-nums;}
+  .obs-nota{font-size:10.5px;color:var(--mut);margin-top:10px;line-height:1.4;}
   .chart-canvas-wrap{position:relative;height:440px;}
   /* Tooltip del gráfico en HTML: el de canvas no permite jerarquía tipográfica ni color */
   .cjs-tt{position:absolute;pointer-events:none;z-index:20;opacity:0;transition:opacity .12s;
@@ -384,6 +404,8 @@
   </aside>
 
   <main>
+    <!-- Panel de observación en tiempo real; lo rellena pintarObservacion() si hay datos -->
+    <div class="obs-panel" id="obs-panel" hidden></div>
     <div class="chart-wrap">
       <div class="chart-header">
         <div>
@@ -520,6 +542,66 @@ let curRefPeriod = null; // serie climatológica elegida {a, b, label} | null = 
 let curMonthFilter = 'all'; // 'all' | '1'..'12' | 'spring'|'summer'|'autumn'|'winter'
 let curCompareYears = new Set();
 let cmpMode = false;   // modo comparar: cada toque añade/quita un año (alternativa táctil a Ctrl+clic)
+
+// ---- Panel "ahora mismo" ------------------------------------------------------
+// Observación horaria de AEMET, SIN validar y aparte de la serie de la gráfica,
+// que usa los valores climatológicos diarios (validados, 2-4 días de retraso).
+// Si observacion.js no existe (uso en local sin descargarlo), el panel no aparece.
+function pintarObservacion(){
+  const p = document.getElementById('obs-panel');
+  if(!p) return;
+  const O = window.OBSERVACION;
+  if(!O || !Array.isArray(O.estaciones) || !O.estaciones.length){ p.hidden = true; return; }
+  const L = (document.documentElement.lang === 'fr');
+  const hora = s => { try{ return new Date(s).toLocaleTimeString(L?'fr-FR':'es-ES',
+                        {hour:'2-digit', minute:'2-digit', timeZone:'Europe/Madrid'}); }
+                      catch(e){ return ''; } };
+  const el = (tag, cls, txt) => { const d = document.createElement(tag);
+    if(cls) d.className = cls; if(txt != null) d.textContent = txt; return d; };
+
+  p.replaceChildren();
+  const head = el('div','obs-head');
+  head.appendChild(el('h2', null, '🌡️ ' + (L?'En ce moment':'Ahora mismo')));
+  const ult = O.estaciones.map(e => e.fint).filter(Boolean).sort().pop();
+  if(ult) head.appendChild(el('div','obs-when',(L?'mesuré à ':'medido a las ') + hora(ult)));
+  p.appendChild(head);
+
+  const cards = el('div','obs-cards');
+  O.estaciones.forEach(e => {
+    const c = el('div','obs-card');
+    c.style.setProperty('--c', e.color || '#999');
+    c.appendChild(el('div','obs-name', e.short));
+    // La ubicación de AEMET a veces repite el nombre de la estación ("Murcia / Murcia")
+    if(e.ubi && e.ubi.toLowerCase() !== (e.short||'').toLowerCase())
+      c.appendChild(el('div','obs-ubi', e.ubi));
+    c.appendChild(el('div','obs-temp', e.ta != null ? e.ta.toFixed(1) + ' °C' : '—'));
+    const mm = [];
+    if(e.tamax != null) mm.push((L?'max ':'máx ') + e.tamax.toFixed(1) + ' °C');
+    if(e.tamin != null) mm.push((L?'min ':'mín ') + e.tamin.toFixed(1) + ' °C');
+    if(mm.length) c.appendChild(el('div','obs-mm', mm.join('  ·  ') +
+      (e.horas ? '   (' + (L?'dernières ':'últimas ') + e.horas + ' h)' : '')));
+    const ex = el('div','obs-extra');
+    if(e.hr != null) ex.appendChild(el('span', null, '💧 ' + e.hr + ' %'));
+    if(e.vv != null) ex.appendChild(el('span', null, '💨 ' + e.vv.toFixed(0) + ' km/h' +
+      (e.vmax != null ? ' (' + (L?'raf. ':'racha ') + e.vmax.toFixed(0) + ')' : '')));
+    if(e.prec != null) ex.appendChild(el('span', null, '🌧️ ' + e.prec.toFixed(1) + ' mm'));
+    if(ex.childNodes.length) c.appendChild(ex);
+    cards.appendChild(c);
+  });
+  p.appendChild(cards);
+  p.appendChild(el('div','obs-nota', L
+    ? "Observation non validée d'AEMET. Le graphique utilise les valeurs quotidiennes officielles, publiées avec 2 à 4 jours de retard."
+    : 'Observación sin validar de AEMET. La gráfica usa los valores diarios oficiales, que se publican con 2–4 días de retraso.'));
+  p.hidden = false;
+}
+// Recarga el archivo con antimemoria, para que la página abierta se mantenga al día
+function refrescarObservacion(){
+  const s = document.createElement('script');
+  s.src = 'observacion.js?t=' + Date.now();
+  s.onload = () => { try{ pintarObservacion(); }finally{ s.remove(); } };
+  s.onerror = () => s.remove();
+  document.head.appendChild(s);
+}
 
 // ---- Tooltip del gráfico en HTML --------------------------------------------
 // El tooltip de Chart.js se dibuja en canvas: no admite negritas, color ni
@@ -763,6 +845,8 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     }
   })();
+  pintarObservacion();
+  setInterval(refrescarObservacion, 15 * 60 * 1000);   // la observación se renueva cada hora
   buildStationList();
   if(typeof buildEfemPanel === 'function') buildEfemPanel();
   if(typeof buildQCPanel === 'function') buildQCPanel();

@@ -23,5 +23,12 @@ if %errorlevel%==0 (
 ) else (
   python generar_efemerides.py
 )
+echo Leyendo la observacion de ahora mismo...
+where py >nul 2>nul
+if %errorlevel%==0 (
+  py -3 descargar_observacion.py
+) else (
+  python descargar_observacion.py
+)
 start "" "Murcia_app_explorador.html"
 pause

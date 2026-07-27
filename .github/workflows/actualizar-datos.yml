@@ -11,8 +11,11 @@ name: Actualizar datos y publicar web
 on:
   schedule:
     # 05:40 UTC = 07:40 en España (verano). AEMET publica los valores
-    # climatológicos diarios con ~4 días de retardo, así que con una vez al día sobra.
+    # climatológicos diarios con 2-4 días de retardo: con una pasada al día sobra.
     - cron: "40 5 * * *"
+    # Cada hora, para el panel de "ahora mismo" (observación en tiempo real).
+    # De paso reintenta los datos diarios, así entran en cuanto AEMET los valide.
+    - cron: "15 * * * *"
   # Republica también al cambiar el código. Los commits del propio robot se hacen
   # con GITHUB_TOKEN, que no dispara workflows: no hay bucle infinito.
   push:
@@ -71,6 +74,15 @@ jobs:
         if: hashFiles('murcia_data.js') != ''
         run: python generar_efemerides.py
 
+      # Panel "ahora mismo". No se commitea (está en .gitignore): se regenera en
+      # cada pasada y viaja directo a la web. Si falla, la web sale sin el panel.
+      - name: Observación en tiempo real
+        id: obs
+        continue-on-error: true
+        env:
+          AEMET_API_KEY: ${{ secrets.AEMET_API_KEY }}
+        run: python descargar_observacion.py
+
       - name: Commitear los datos nuevos
         run: |
           git config user.name  "github-actions[bot]"
@@ -89,6 +101,7 @@ jobs:
           mkdir -p _site
           cp Murcia_app_explorador.html _site/index.html
           cp murcia_data.js efemerides.js _site/
+          cp observacion.js _site/ 2>/dev/null || echo "sin observación esta vez"
           cp informe_olas_calor.html informe_olas_frio.html _site/
           cp *_diario.csv _site/ 2>/dev/null || true
           touch _site/.nojekyll   # que Pages no intente procesarlo con Jekyll
@@ -109,9 +122,11 @@ jobs:
 
   # Se ejecuta después de publicar: la web queda actualizada igualmente, pero el
   # workflow se marca en rojo (y llega aviso por email) si AEMET no respondió.
+  # Solo en la pasada diaria: si avisara también en las horarias, un rato de
+  # saturación de AEMET llenaría el correo de avisos por el mismo problema.
   avisar:
     needs: [datos, publicar]
-    if: always() && needs.datos.outputs.aemet == 'failure'
+    if: always() && needs.datos.outputs.aemet == 'failure' && github.event.schedule != '15 * * * *'
     runs-on: ubuntu-latest
     steps:
       - run: |
