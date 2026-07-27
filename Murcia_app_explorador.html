@@ -238,6 +238,8 @@
   .year-shortcuts{display:flex;gap:5px;flex-wrap:wrap;margin-left:auto;}
   .quick-btn{background:transparent;border:1.5px dashed var(--border);border-radius:14px;padding:5px 10px;font-size:11px;cursor:pointer;color:var(--mut);font-family:inherit;}
   .quick-btn:hover{border-style:solid;color:var(--warm);border-color:var(--warm);}
+  /* Modo comparar: imprescindible en móvil, donde no hay Ctrl+clic */
+  .quick-btn.on{border-style:solid;background:var(--warm);border-color:var(--warm);color:#fff;}
 
 
 
@@ -372,9 +374,10 @@
       <div class="pills" id="metric-bar"></div>
       <div class="year-compare-bar" id="year-compare-bar">
         <div class="year-compare-label">📊 <span data-fr="Comparer années">Comparar años</span>
-          <small><span data-fr="clic = 1 an · Ctrl+clic = plusieurs">clic = 1 año · Ctrl+clic = comparar varios</span></small></div>
+          <small><span data-fr="1 clic = 1 an · Ctrl+clic ou «➕ Plusieurs» = comparer">1 clic = 1 año · Ctrl+clic o «➕ Varios» = comparar</span></small></div>
         <div class="year-pills" id="year-pills"></div>
         <div class="year-shortcuts">
+          <button class="quick-btn" data-quick="cmp" id="cmp-toggle" title="Ir tocando años para compararlos (en móvil no hay Ctrl+clic)"><span data-fr="➕ Plusieurs">➕ Varios</span></button>
           <button class="quick-btn" data-quick="last2"><span data-fr="2 dern.">Últimos 2</span></button>
           <button class="quick-btn" data-quick="last5"><span data-fr="5 dern.">Últimos 5</span></button>
           <button class="quick-btn" data-quick="all"><span data-fr="Tous">Todos</span></button>
@@ -481,6 +484,7 @@ let curStyle = 'auto';
 let curRefPeriod = null; // serie climatológica elegida {a, b, label} | null = toda la serie
 let curMonthFilter = 'all'; // 'all' | '1'..'12' | 'spring'|'summer'|'autumn'|'winter'
 let curCompareYears = new Set();
+let cmpMode = false;   // modo comparar: cada toque añade/quita un año (alternativa táctil a Ctrl+clic)
 let curCompareView = 'daily'; // 'daily' = por días | 'total' = un valor agregado por año
 let chartInstance = null;
 let lbChartInstance = null;
@@ -1147,7 +1151,7 @@ function refreshYearCompareBar(){
     b.textContent = y;
     b.dataset.year = y;
     b.addEventListener('click', (e) => {
-      const multi = e.ctrlKey || e.metaKey; // Ctrl (o Cmd en Mac) = comparar varios
+      const multi = e.ctrlKey || e.metaKey || cmpMode; // Ctrl/Cmd, o el botón «➕ Varios» en táctil
       if(curChart === 'ic_table'){ curCompareYears.clear(); curCompareYears.add(y); } // tabla anual: un año cada vez
       else if(multi){
         if(curCompareYears.has(y)) curCompareYears.delete(y); else curCompareYears.add(y);
@@ -1172,6 +1176,11 @@ function bindYearCompareShortcuts(){
     const btn = e.target.closest('.quick-btn');
     if(!btn) return;
     const q = btn.dataset.quick;
+    if(q === 'cmp'){   // no toca la selección: solo cambia cómo se interpretan los toques siguientes
+      cmpMode = !cmpMode;
+      btn.classList.toggle('on', cmpMode);
+      return;
+    }
     const yrs = Array.from(document.querySelectorAll('#year-pills .year-pill')).map(p => parseInt(p.dataset.year));
     curCompareYears.clear();
     if(q === 'last2') yrs.slice(0,2).forEach(y => curCompareYears.add(y));

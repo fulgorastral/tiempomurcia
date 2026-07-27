@@ -270,6 +270,35 @@ sub("localStorage.setItem('alb_app_state', JSON.stringify(st));",
 sub("const raw = localStorage.getItem('alb_app_state');",
     "const raw = localStorage.getItem('mur_app_state');", "ls leer")
 
+# ---------- 14. Comparar varios años en móvil (no hay Ctrl+clic) ----------
+sub("  .quick-btn:hover{border-style:solid;color:var(--warm);border-color:var(--warm);}",
+    "  .quick-btn:hover{border-style:solid;color:var(--warm);border-color:var(--warm);}\n"
+    "  /* Modo comparar: imprescindible en móvil, donde no hay Ctrl+clic */\n"
+    "  .quick-btn.on{border-style:solid;background:var(--warm);border-color:var(--warm);color:#fff;}",
+    "css modo comparar")
+sub('<small><span data-fr="clic = 1 an · Ctrl+clic = plusieurs">clic = 1 año · Ctrl+clic = comparar varios</span></small></div>',
+    '<small><span data-fr="1 clic = 1 an · Ctrl+clic ou «➕ Plusieurs» = comparer">1 clic = 1 año · Ctrl+clic o «➕ Varios» = comparar</span></small></div>',
+    "texto ayuda comparar")
+sub('        <div class="year-shortcuts">\n',
+    '        <div class="year-shortcuts">\n'
+    '          <button class="quick-btn" data-quick="cmp" id="cmp-toggle" title="Ir tocando años para compararlos (en móvil no hay Ctrl+clic)"><span data-fr="➕ Plusieurs">➕ Varios</span></button>\n',
+    "botón modo comparar")
+sub("let curCompareYears = new Set();",
+    "let curCompareYears = new Set();\n"
+    "let cmpMode = false;   // modo comparar: cada toque añade/quita un año (alternativa táctil a Ctrl+clic)",
+    "estado modo comparar")
+sub("      const multi = e.ctrlKey || e.metaKey; // Ctrl (o Cmd en Mac) = comparar varios",
+    "      const multi = e.ctrlKey || e.metaKey || cmpMode; // Ctrl/Cmd, o el botón «➕ Varios» en táctil",
+    "multi por toque")
+sub("    const q = btn.dataset.quick;\n",
+    "    const q = btn.dataset.quick;\n"
+    "    if(q === 'cmp'){   // no toca la selección: solo cambia cómo se interpretan los toques siguientes\n"
+    "      cmpMode = !cmpMode;\n"
+    "      btn.classList.toggle('on', cmpMode);\n"
+    "      return;\n"
+    "    }\n",
+    "handler modo comparar")
+
 # ---------- Resultado ----------
 if errores:
     print("❌ El generador NO ha escrito nada. Parches que no encajan:")

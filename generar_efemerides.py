@@ -9,7 +9,7 @@ Genera las efemérides "Olas de calor" y "Olas de frío" a partir de murcia_data
 
 Criterios (adaptados de la metodología de AEMET, para una sola estación):
   · Ola de CALOR: >= 3 días consecutivos con la MÁXIMA por encima del percentil 95
-    de las máximas diarias de julio y agosto del periodo de referencia 1984-2013.
+    de las máximas diarias de julio y agosto del periodo de referencia 1991-2020.
   · Ola de FRÍO:  >= 3 días consecutivos con la MÍNIMA por debajo del percentil 5
     de las mínimas diarias de enero y febrero del mismo periodo.
   · Si el episodio se interrumpe un solo día, se considera la misma ola.
@@ -31,7 +31,10 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 ENTRADA = os.path.join(AQUI, "murcia_data.js")
 EFEMERIDES = os.path.join(AQUI, "efemerides.js")
 
-REF_INI, REF_FIN = 1984, 2013   # periodo de referencia para los percentiles
+# Periodo de referencia para los percentiles: 1991-2020 es la normal climática
+# vigente (OMM y AEMET). Antes era 1984-2013, pero la serie oficial de Caravaca
+# empieza en 2009 y se quedaba sin referencia suficiente.
+REF_INI, REF_FIN = 1991, 2020
 
 TIPOS = [
     {"clave": "calor", "emoji": "🔥", "titulo": "Olas de calor",

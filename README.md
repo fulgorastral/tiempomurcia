@@ -1,8 +1,12 @@
 # Murcia y Caravaca · Explorador de datos meteorológicos
 
-Aplicación web para explorar la serie diaria de **Murcia (7178I)** y **Caravaca de la Cruz (7119B)**
-desde 1984: temperaturas, precipitación, viento, humedad, insolación, climogramas, comparación
-entre años y efemérides de olas de calor y de frío.
+Aplicación web para explorar la serie diaria de **Murcia (7178I, desde 1984)** y
+**Caravaca de la Cruz (7119B, desde 2009)**: temperaturas, precipitación, viento, humedad,
+insolación, climogramas, comparación entre años y efemérides de olas de calor y de frío.
+
+Las olas se detectan sobre el periodo de referencia **1991–2020**, la normal climática vigente
+de la OMM: 3 días consecutivos por encima del percentil 95 de las máximas de julio y agosto
+(calor) o por debajo del percentil 5 de las mínimas de enero y febrero (frío).
 
 Todo el cálculo pasa en el navegador; los datos viven en `murcia_data.js`.
 
