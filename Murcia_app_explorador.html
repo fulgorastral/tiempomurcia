@@ -2571,12 +2571,17 @@ function renderChartMulti(canvasId, type, labels, datasets, info, isCompare){
           filter: (item) => !item.dataset.isBand,
           callbacks:{
           title: items => {
-            const lbl = String(items[0].label);
+            const Lt = (document.documentElement.lang === 'fr');
+            let lbl = String(items[0].label);
             // Comparativa de un mes concreto: el eje solo lleva el número de día → añadir el mes
             if(/^\d{1,2}$/.test(lbl) && curMonthFilter && /^\d+$/.test(curMonthFilter)){
-              const Lt = (document.documentElement.lang === 'fr');
               const mi = parseInt(curMonthFilter)-1;
-              return Lt ? lbl+' '+MONTHS_FULL_FR[mi].toLowerCase() : lbl+' de '+MONTHS_FULL_ES[mi].toLowerCase();
+              lbl = Lt ? lbl+' '+MONTHS_FULL_FR[mi].toLowerCase() : lbl+' de '+MONTHS_FULL_ES[mi].toLowerCase();
+            }
+            // Con un solo año seleccionado el eje no lo indica: completar la fecha
+            if(typeof curCompareYears !== 'undefined' && curCompareYears.size === 1){
+              const y = [...curCompareYears][0];
+              if(!new RegExp('\\b'+y+'\\b').test(lbl)) lbl += (Lt ? ' ' : ' de ') + y;
             }
             return lbl;
           },
@@ -2598,7 +2603,15 @@ function renderChartMulti(canvasId, type, labels, datasets, info, isCompare){
             const v = item.parsed.y;
             if(v == null) return `${item.dataset.label}: ${L?'sans données':'sin datos'}`;
             // Si es línea de media o banda, mostrar etiqueta tal cual
-            if(item.dataset.isMeanLine){ if(v==null) return null; const u = (item.dataset.yAxisID==='y1') ? 'mm' : info.unit; return '➜ '+item.dataset.label+': '+v.toFixed(1)+' '+u + (item.dataset.serieMean!=null ? '  ['+(L?'moy. période':'media periodo')+' '+item.dataset.serieMean.toFixed(1)+(item.dataset.yAxisID==='y1'?' mm':'°')+']' : ''); }
+            if(item.dataset.isMeanLine){
+              const u = (item.dataset.yAxisID==='y1') ? 'mm' : info.unit;
+              const filas = [`${item.dataset.label}: ${v.toFixed(1)} ${u}`];
+              // La media del periodo solo cabe (y solo aporta) cuando no se comparan varios años
+              const nReal = item.chart.data.datasets.filter(d => !d.isBand && !d.isMeanLine && d.data[item.dataIndex] != null).length;
+              if(nReal <= 1 && item.dataset.serieMean != null)
+                filas.push(`${L?'Moyenne de la période affichée':'Media del periodo mostrado'}: ${item.dataset.serieMean.toFixed(1)} ${u}`);
+              return filas;
+            }
             if(item.dataset.isBand) return `${item.dataset.label}: ${v.toFixed(2)} ${info.unit}`;
             // Calcular ranking del año actual (solo modo comparar años o cuando hay >=2 datasets reales)
             let rankPrefix = '';
@@ -2613,17 +2626,39 @@ function renderChartMulti(canvasId, type, labels, datasets, info, isCompare){
                 rankPrefix = `${pos+1}º `;
               }
             }
-            // Vista diaria comparativa: añadir máxima y mínima del día
+            // Vista diaria comparativa: el dato del día, con máxima, mínima y desviación
             if(item.dataset.dayTx || item.dataset.dayTn){
-              const di = item.dataIndex;
+              const di = item.dataIndex, u = info.unit;
               const tx = item.dataset.dayTx ? item.dataset.dayTx[di] : null;
               const tn = item.dataset.dayTn ? item.dataset.dayTn[di] : null;
-              const extra = [];
-              if(tx != null) extra.push((L?'max':'máx')+' '+tx.toFixed(1)+'°');
-              if(tn != null) extra.push((L?'min':'mín')+' '+tn.toFixed(1)+'°');
-              const base = `${rankPrefix||''}${item.dataset.label}: ${v.toFixed(2)} ${info.unit}`;
-              const sm = (item.dataset.serieMean!=null) ? '  ['+(L?'moyenne':'media')+' '+item.dataset.serieMean.toFixed(1)+'°]' : '';
-              return (extra.length ? base+'  ('+extra.join(' · ')+')' : base) + sm;
+              const cab = `${rankPrefix||''}${item.dataset.label}`;
+              const nReal = item.chart.data.datasets.filter(d => !d.isBand && !d.isMeanLine && d.data[di] != null).length;
+              // Comparando varios años el desglose no cabe: una línea por año
+              if(nReal > 1){
+                const ex = [];
+                if(tx != null) ex.push((L?'max':'máx')+' '+tx.toFixed(1)+'°');
+                if(tn != null) ex.push((L?'min':'mín')+' '+tn.toFixed(1)+'°');
+                return `${cab}: ${v.toFixed(1)} ${u}` + (ex.length ? '  ('+ex.join(' · ')+')' : '');
+              }
+              // Un solo año: desglose completo, diciendo QUÉ es cada número
+              const varLbl = (L ? info.label_fr : info.label).replace(/\s*\([^)]*\)\s*$/, '');
+              const ml = item.chart.data.datasets.find(d => d.isMeanLine);
+              const nv = ml ? ml.data[di] : null;
+              let desv = '';
+              if(nv != null){
+                const d = v - nv;
+                desv = '  (' + (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(1) + ' ' + u + ' ' +
+                       (d >= 0 ? (L?'au-dessus de la normale':'sobre lo normal')
+                               : (L?'en dessous de la normale':'bajo lo normal')) + ')';
+              }
+              const filas = [cab, `${varLbl}: ${v.toFixed(1)} ${u}${desv}`];
+              const mm = [];
+              if(tx != null) mm.push(`${L?'Maximale':'Máxima'}: ${tx.toFixed(1)} ${u}`);
+              if(tn != null) mm.push(`${L?'Minimale':'Mínima'}: ${tn.toFixed(1)} ${u}`);
+              if(mm.length) filas.push(mm.join('  ·  '));
+              if(item.dataset.serieMean != null)
+                filas.push(`${L?'Moyenne de la période affichée':'Media del periodo mostrado'}: ${item.dataset.serieMean.toFixed(1)} ${u}`);
+              return filas;
             }
             const c = item.dataset.counts ? item.dataset.counts[item.dataIndex] : null;
             const e = item.dataset.expected ? item.dataset.expected[item.dataIndex] : null;
