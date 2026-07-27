@@ -1,0 +1,115 @@
+name: Actualizar datos y publicar web
+
+# Cada día baja de AEMET los días nuevos de Murcia (7178I) y Caravaca (7119B),
+# regenera las efemérides, lo commitea y republica la web en GitHub Pages.
+#
+# Requisitos (se configuran una sola vez en GitHub):
+#   1. Settings › Secrets and variables › Actions › New repository secret
+#        Name: AEMET_API_KEY   Secret: la clave de https://opendata.aemet.es
+#   2. Settings › Pages › Source: "GitHub Actions"
+
+on:
+  schedule:
+    # 05:40 UTC = 07:40 en España (verano). AEMET publica los valores
+    # climatológicos diarios con ~4 días de retardo, así que con una vez al día sobra.
+    - cron: "40 5 * * *"
+  workflow_dispatch:
+    inputs:
+      completo:
+        description: "Rebajar TODA la serie desde 1984 (tarda bastante; solo la primera vez o si algo se corrompe)"
+        type: boolean
+        default: false
+
+# No cancelar una actualización a medias: dejaría la serie sin escribir.
+concurrency:
+  group: actualizar-datos
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # commitear murcia_data.js y los informes
+  pages: write      # publicar en Pages
+  id-token: write   # requerido por deploy-pages
+
+jobs:
+  datos:
+    runs-on: ubuntu-latest
+    # La descarga completa son ~170 bloques de 6 meses con esperas por 429 de AEMET.
+    timeout-minutes: 330
+    outputs:
+      aemet: ${{ steps.aemet.outcome }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Los scripts solo usan la librería estándar: no hay nada que instalar.
+      - name: Descargar datos de AEMET
+        id: aemet
+        continue-on-error: true   # si AEMET está saturada, se publica igual con lo de ayer
+        env:
+          AEMET_API_KEY: ${{ secrets.AEMET_API_KEY }}
+        run: |
+          if [ "${{ inputs.completo }}" = "true" ]; then
+            python descargar_aemet_murcia.py --completo
+          else
+            python descargar_aemet_murcia.py
+          fi
+
+      # Red de emergencia: solo si NO hay absolutamente ningún dato. Nunca
+      # sustituye una serie oficial de AEMET por datos de modelo (ERA5).
+      - name: Plan B (Open-Meteo) si no hay ningún dato
+        if: steps.aemet.outcome == 'failure' && hashFiles('murcia_data.js') == ''
+        run: python descargar_openmeteo_murcia.py
+
+      - name: Regenerar efemérides (olas de calor y frío)
+        if: hashFiles('murcia_data.js') != ''
+        run: python generar_efemerides.py
+
+      - name: Commitear los datos nuevos
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "Sin cambios: AEMET no ha publicado días nuevos."
+          else
+            git commit -m "Datos actualizados automáticamente ($(date -u +%Y-%m-%d))"
+            git pull --rebase --autostash
+            git push
+          fi
+
+      - name: Preparar la web
+        run: |
+          mkdir -p _site
+          cp Murcia_app_explorador.html _site/index.html
+          cp murcia_data.js efemerides.js _site/
+          cp informe_olas_calor.html informe_olas_frio.html _site/
+          cp *_diario.csv _site/ 2>/dev/null || true
+          touch _site/.nojekyll   # que Pages no intente procesarlo con Jekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  publicar:
+    needs: datos
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  # Se ejecuta después de publicar: la web queda actualizada igualmente, pero el
+  # workflow se marca en rojo (y llega aviso por email) si AEMET no respondió.
+  avisar:
+    needs: [datos, publicar]
+    if: always() && needs.datos.outputs.aemet == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::AEMET no respondió hoy. La web sigue publicada con los datos anteriores; mañana se reintenta."
+          exit 1

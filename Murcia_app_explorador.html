@@ -624,7 +624,13 @@ window.addEventListener('DOMContentLoaded', () => {
       DB.stations.forEach(st => { const rows = DB.data[st.code]||[]; days += rows.length;
         if(rows.length){ minY = Math.min(minY, +rows[0][0].slice(0,4)); maxY = Math.max(maxY, +rows[rows.length-1][0].slice(0,4)); } });
       const fuente = DB.source === 'open-meteo' ? '⚠ Open-Meteo ERA5 (provisional, no oficial)' : 'AEMET OpenData';
-      el.textContent = DB.stations.length + (DB.stations.length===1?' estación · ':' estaciones · ') + minY + '-' + maxY + ' · ' + days.toLocaleString('es-ES') + ' días de datos · ' + fuente;
+      const dmy = s => s ? s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4) : '';
+      let ultimo = '';
+      DB.stations.forEach(st => { const rows = DB.data[st.code]||[];
+        if(rows.length && rows[rows.length-1][0] > ultimo) ultimo = rows[rows.length-1][0]; });
+      el.textContent = DB.stations.length + (DB.stations.length===1?' estación · ':' estaciones · ') + minY + '-' + maxY + ' · ' + days.toLocaleString('es-ES') + ' días de datos · ' + fuente
+        + (ultimo ? ' · datos hasta el ' + dmy(ultimo) : '')
+        + (DB.generado ? ' · actualizado el ' + dmy(DB.generado) : '');
     }
     if(!DB.stations.length){
       const main = document.querySelector('main');

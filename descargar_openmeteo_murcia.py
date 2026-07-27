@@ -58,6 +58,7 @@ def pedir(lugar, fin):
 def main():
     fin = (date.today() - timedelta(days=6)).isoformat()  # ERA5 va con ~5 días de retraso
     salida = {"source": "open-meteo",
+              "generado": date.today().isoformat(),
               "fields": ["date", "rr", "tn", "tx", "tm", "ffm", "fxy", "qcflags", "fxy_ms",
                          "um", "ux", "un", "res12", "res13", "tntxm", "fxi", "sol"],
               "stations": [], "data": {}}

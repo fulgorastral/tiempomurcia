@@ -225,6 +225,7 @@ def main():
     hoy = date.today()
 
     salida = {"source": "aemet",
+              "generado": hoy.isoformat(),
               "fields": ["date", "rr", "tn", "tx", "tm", "ffm", "fxy", "qcflags", "fxy_ms",
                          "um", "ux", "un", "res12", "res13", "tntxm", "fxi", "sol"],
               "stations": [], "data": {}}
