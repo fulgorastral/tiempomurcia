@@ -125,6 +125,8 @@
   .cjs-tt .tt-row span:first-child{color:var(--mut);}
   .cjs-tt .tt-row span:last-child{font-weight:700;font-variant-numeric:tabular-nums;}
   .cjs-tt .tt-plain{font-size:12px;}
+  .cjs-tt .tt-foot{font-size:10.5px;color:var(--mut);margin-top:9px;padding-top:8px;
+    border-top:1px solid var(--border);}
   .cjs-tt .tt-bar{position:relative;height:7px;border-radius:4px;background:var(--hover);
     border:1px solid var(--border);margin:8px 0 3px;}
   .cjs-tt .tt-bar i{position:absolute;top:0;height:100%;border-radius:4px;}
@@ -546,6 +548,7 @@ let curCompareYears = new Set();
 // añadirla es lo que se espera; con ratón se mantiene clic = un año.
 const ES_TACTIL = !!(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
 let cmpMode = ES_TACTIL;
+let ultimoDiaTocado = null;   // en táctil, el mapa sinóptico se abre al segundo toque
 
 // ---- Panel "ahora mismo" ------------------------------------------------------
 // Observación horaria de AEMET, SIN validar y aparte de la serie de la gráfica,
@@ -672,6 +675,7 @@ function renderChartTooltip(ctx){
         }
       });
     });
+    (tooltip.footer || []).forEach(t => { if(String(t).trim()) add('tt-foot', t); });
     el.replaceChildren(frag);
   }catch(err){
     // Nunca dejar al usuario sin tooltip por un fallo de formato.
@@ -2761,7 +2765,14 @@ function renderChartMulti(canvasId, type, labels, datasets, info, isCompare){
         const ds = chart.data.datasets[el.datasetIndex]; let dateStr = null;
         if(ds && ds.compYear && ds.compDayKeys){ const md = ds.compDayKeys[el.index]; if(md) dateStr = ds.compYear + '-' + md; }
         else { const lbl = String(chart.data.labels[el.index]||''); if(/^\d{4}-\d{2}-\d{2}$/.test(lbl)) dateStr = lbl; }
-        if(dateStr && typeof openSynopticModal === 'function') openSynopticModal(dateStr);
+        if(dateStr && typeof openSynopticModal === 'function'){
+          // En táctil no hay "pasar el ratón": el mismo toque mostraría el dato y
+          // abriría el mapa encima, tapándolo. El primero enseña el dato; solo un
+          // segundo toque sobre el MISMO día abre el mapa.
+          if(ES_TACTIL && ultimoDiaTocado !== dateStr){ ultimoDiaTocado = dateStr; return; }
+          ultimoDiaTocado = null;
+          openSynopticModal(dateStr);
+        }
       },
       onHover: (evt, elements, chart) => {
         if(canvasId !== 'chart') return;
@@ -2801,6 +2812,17 @@ function renderChartMulti(canvasId, type, labels, datasets, info, isCompare){
               if(!new RegExp('\\b'+y+'\\b').test(lbl)) lbl += (Lt ? ' ' : ' de ') + y;
             }
             return lbl;
+          },
+          // En táctil, avisar de que el mapa del día se abre con un segundo toque
+          footer: (items) => {
+            if(!ES_TACTIL || !items || !items.length) return '';
+            const ds = items[0].dataset || {};
+            const esDia = (ds.compYear && ds.compDayKeys) ||
+                          /^\d{4}-\d{2}-\d{2}$/.test(String(items[0].label || ''));
+            if(!esDia) return '';
+            return (document.documentElement.lang === 'fr')
+              ? 'touchez à nouveau pour voir la carte du jour'
+              : 'toca otra vez para ver el mapa del día';
           },
           // Ordenar items: primero los años (descendente), luego bandas, luego media
           itemSort: (a, b) => {
