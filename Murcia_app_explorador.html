@@ -541,7 +541,11 @@ let curStyle = 'auto';
 let curRefPeriod = null; // serie climatológica elegida {a, b, label} | null = toda la serie
 let curMonthFilter = 'all'; // 'all' | '1'..'12' | 'spring'|'summer'|'autumn'|'winter'
 let curCompareYears = new Set();
-let cmpMode = false;   // modo comparar: cada toque añade/quita un año (alternativa táctil a Ctrl+clic)
+// Modo comparar: cada toque añade o quita un año. En pantallas táctiles va
+// activado de salida, porque ahí no existe Ctrl+clic y tocar una etiqueta para
+// añadirla es lo que se espera; con ratón se mantiene clic = un año.
+const ES_TACTIL = !!(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
+let cmpMode = ES_TACTIL;
 
 // ---- Panel "ahora mismo" ------------------------------------------------------
 // Observación horaria de AEMET, SIN validar y aparte de la serie de la gráfica,
@@ -847,6 +851,16 @@ window.addEventListener('DOMContentLoaded', () => {
   })();
   pintarObservacion();
   setInterval(refrescarObservacion, 15 * 60 * 1000);   // la observación se renueva cada hora
+  // En táctil el modo comparar arranca encendido: reflejarlo en el botón y en la ayuda
+  if(ES_TACTIL){
+    const bt = document.getElementById('cmp-toggle');
+    if(bt) bt.classList.add('on');
+    const ayuda = document.querySelector('#year-compare-bar .year-compare-label small span');
+    if(ayuda){
+      ayuda.textContent = 'toca años para compararlos · «➕ Varios» apagado = uno cada vez';
+      ayuda.setAttribute('data-fr', 'touchez des années pour comparer · «➕ Plusieurs» éteint = une seule');
+    }
+  }
   buildStationList();
   if(typeof buildEfemPanel === 'function') buildEfemPanel();
   if(typeof buildQCPanel === 'function') buildQCPanel();
