@@ -13,9 +13,12 @@ on:
     # 05:40 UTC = 07:40 en España (verano). AEMET publica los valores
     # climatológicos diarios con 2-4 días de retardo: con una pasada al día sobra.
     - cron: "40 5 * * *"
-    # Cada hora, para el panel de "ahora mismo" (observación en tiempo real).
-    # De paso reintenta los datos diarios, así entran en cuanto AEMET los valide.
-    - cron: "15 * * * *"
+    # Para el panel de "ahora mismo" (observación en tiempo real). Se pide cada
+    # 20 min, no cada hora: los cron de GitHub son "mejor esfuerzo" y se retrasan
+    # con carga (se han visto huecos de 4 h pidiéndolo cada hora). Con tres
+    # intentos por hora, casi siempre entra uno. De paso reintenta los datos
+    # diarios, así entran en cuanto AEMET los valida.
+    - cron: "*/20 * * * *"
   # Republica también al cambiar el código. Los commits del propio robot se hacen
   # con GITHUB_TOKEN, que no dispara workflows: no hay bucle infinito.
   push:
@@ -126,7 +129,7 @@ jobs:
   # saturación de AEMET llenaría el correo de avisos por el mismo problema.
   avisar:
     needs: [datos, publicar]
-    if: always() && needs.datos.outputs.aemet == 'failure' && github.event.schedule != '15 * * * *'
+    if: always() && needs.datos.outputs.aemet == 'failure' && github.event.schedule != '*/20 * * * *'
     runs-on: ubuntu-latest
     steps:
       - run: |
