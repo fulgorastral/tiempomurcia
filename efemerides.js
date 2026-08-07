@@ -1,7 +1,7 @@
 // Generado por generar_efemerides.py — se rehace en cada actualización de datos
 window.EFEMERIDES = [
   {
-    "titulo": "🔥 Olas de calor (Murcia: 11 · Caravaca: 9)",
+    "titulo": "🔥 Olas de calor (Murcia: 12 · Caravaca: 9)",
     "archivo": "informe_olas_calor.html"
   },
   {
